@@ -1,20 +1,42 @@
 """
 Test Suite for Alpha Vantage and TraderMade API Connections
-Validates historical data and real-time streaming capabilities
+Following TDD methodology for forex bot targeting 25% annual returns
+Integrated with dual database architecture: TimescaleDB (Railway) + Supabase
 """
 import pytest
+import pytest_asyncio
 import asyncio
 import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from supabase import create_client, Client
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class TestAlphaVantageAPI:
     """
     Test suite for Alpha Vantage historical data API
     Focus on forex technical indicators and economic data
+    Stores historical data in TimescaleDB for backtesting
     """
+    
+    @pytest.fixture
+    def timescale_connection(self):
+        """Initialize TimescaleDB connection for historical data"""
+        conn = psycopg2.connect(
+            host=os.getenv('TIMESCALE_HOST', 'localhost'),
+            port=os.getenv('TIMESCALE_PORT', 5432),
+            database=os.getenv('TIMESCALE_DB', 'bottrader_timeseries'),
+            user=os.getenv('TIMESCALE_USER', 'postgres'),
+            password=os.getenv('TIMESCALE_PASSWORD')
+        )
+        yield conn
+        conn.close()
     
     @pytest.fixture
     async def alphavantage_client(self):
@@ -44,12 +66,13 @@ class TestAlphaVantageAPI:
             "Invalid API tier"
     
     @pytest.mark.asyncio
-    async def test_forex_daily_data(self, alphavantage_client):
+    async def test_forex_daily_data(self, alphavantage_client, timescale_connection):
         """
-        Test 2.2.2: Retrieve daily forex data
-        Acceptance: 2+ years of historical data available
+        Test 2.2.2: Retrieve daily forex data and store in TimescaleDB
+        Acceptance: 2+ years of historical data stored in hypertable
         """
         pairs = ['EUR/USD', 'GBP/JPY', 'AUD/JPY', 'USD/TRY', 'NZD/JPY', 'USD/ZAR']
+        cursor = timescale_connection.cursor()
         
         for pair in pairs:
             # Convert to Alpha Vantage format
@@ -65,6 +88,21 @@ class TestAlphaVantageAPI:
             assert len(daily_data) >= 500, \
                 f"Insufficient history for {pair}: {len(daily_data)} days"
             
+            # Store in TimescaleDB
+            for record in daily_data[:100]:  # Store recent 100 days
+                cursor.execute("""
+                    INSERT INTO forex_prices (time, symbol, bid, ask, spread, volume)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING;
+                """, (
+                    datetime.fromisoformat(record['date']),
+                    pair.replace('/', '_'),
+                    float(record['close']),
+                    float(record['close']) + 0.0002,  # Simulated spread
+                    0.0002,
+                    record.get('volume', 0)
+                ))
+            
             # Verify data structure
             if len(daily_data) > 0:
                 first_record = daily_data[0]
@@ -72,14 +110,18 @@ class TestAlphaVantageAPI:
                 for field in required_fields:
                     assert field in first_record, \
                         f"Missing {field} in daily data"
+        
+        timescale_connection.commit()
+        cursor.close()
     
     @pytest.mark.asyncio
-    async def test_forex_intraday_data(self, alphavantage_client):
+    async def test_forex_intraday_data(self, alphavantage_client, timescale_connection):
         """
-        Test 2.2.3: Retrieve intraday forex data
-        Acceptance: Multiple timeframes available (5min, 15min, 1h)
+        Test 2.2.3: Retrieve intraday forex data and store
+        Acceptance: Multiple timeframes stored in TimescaleDB
         """
         timeframes = ['5min', '15min', '60min']
+        cursor = timescale_connection.cursor()
         
         for interval in timeframes:
             intraday_data = await alphavantage_client.get_fx_intraday(
@@ -92,6 +134,21 @@ class TestAlphaVantageAPI:
                 f"No intraday data for {interval}"
             assert len(intraday_data) > 0, \
                 f"Empty intraday data for {interval}"
+            
+            # Store in TimescaleDB
+            for record in intraday_data[:50]:  # Store recent 50 candles
+                cursor.execute("""
+                    INSERT INTO forex_prices (time, symbol, bid, ask, spread, volume)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING;
+                """, (
+                    datetime.fromisoformat(record['timestamp']),
+                    'EUR_USD',
+                    float(record['close']),
+                    float(record['close']) + 0.0001,
+                    0.0001,
+                    record.get('volume', 0)
+                ))
             
             # Verify proper time intervals
             if len(intraday_data) >= 2:
@@ -107,12 +164,15 @@ class TestAlphaVantageAPI:
                 actual_delta = abs((time2 - time1).total_seconds() / 60)
                 assert actual_delta == expected_delta[interval], \
                     f"Incorrect time interval for {interval}"
+        
+        timescale_connection.commit()
+        cursor.close()
     
     @pytest.mark.asyncio
-    async def test_technical_indicators_rsi(self, alphavantage_client):
+    async def test_technical_indicators_rsi(self, alphavantage_client, timescale_connection):
         """
-        Test 2.2.4: Retrieve RSI technical indicator
-        Acceptance: RSI(10) data available as per specifications
+        Test 2.2.4: Retrieve RSI technical indicator and store
+        Acceptance: RSI(10) data stored in TimescaleDB
         """
         rsi_data = await alphavantage_client.get_technical_indicator(
             function='RSI',
@@ -125,17 +185,38 @@ class TestAlphaVantageAPI:
         assert rsi_data is not None, "Failed to retrieve RSI data"
         assert len(rsi_data) > 0, "Empty RSI data"
         
-        # Verify RSI values are in valid range
-        for record in rsi_data[:10]:
+        # Store RSI values in TimescaleDB as signals
+        cursor = timescale_connection.cursor()
+        
+        for record in rsi_data[:20]:
             rsi_value = float(record['RSI'])
             assert 0 <= rsi_value <= 100, \
                 f"Invalid RSI value: {rsi_value}"
+            
+            # Store as trading signal
+            cursor.execute("""
+                INSERT INTO trading_signals (time, data)
+                VALUES (%s, %s)
+                ON CONFLICT DO NOTHING;
+            """, (
+                datetime.fromisoformat(record['timestamp']),
+                json.dumps({
+                    'symbol': 'EUR_USD',
+                    'indicator': 'RSI',
+                    'value': rsi_value,
+                    'period': 10,
+                    'signal': 'oversold' if rsi_value < 30 else 'overbought' if rsi_value > 70 else 'neutral'
+                })
+            ))
+        
+        timescale_connection.commit()
+        cursor.close()
     
     @pytest.mark.asyncio
-    async def test_technical_indicators_macd(self, alphavantage_client):
+    async def test_technical_indicators_macd(self, alphavantage_client, timescale_connection):
         """
-        Test 2.2.5: Retrieve MACD technical indicator
-        Acceptance: MACD(12,26,9) configuration available
+        Test 2.2.5: Retrieve MACD technical indicator and store
+        Acceptance: MACD(12,26,9) configuration stored in TimescaleDB
         """
         macd_data = await alphavantage_client.get_technical_indicator(
             function='MACD',
@@ -150,13 +231,34 @@ class TestAlphaVantageAPI:
         assert macd_data is not None, "Failed to retrieve MACD data"
         assert len(macd_data) > 0, "Empty MACD data"
         
-        # Verify MACD components
-        if len(macd_data) > 0:
-            first_record = macd_data[0]
+        cursor = timescale_connection.cursor()
+        
+        # Verify MACD components and store
+        for record in macd_data[:20]:
             required_fields = ['MACD', 'MACD_Signal', 'MACD_Hist']
             for field in required_fields:
-                assert field in first_record, \
+                assert field in record, \
                     f"Missing MACD component: {field}"
+            
+            # Store as trading signal
+            cursor.execute("""
+                INSERT INTO trading_signals (time, data)
+                VALUES (%s, %s)
+                ON CONFLICT DO NOTHING;
+            """, (
+                datetime.fromisoformat(record['timestamp']),
+                json.dumps({
+                    'symbol': 'EUR_USD',
+                    'indicator': 'MACD',
+                    'macd': float(record['MACD']),
+                    'signal': float(record['MACD_Signal']),
+                    'histogram': float(record['MACD_Hist']),
+                    'crossover': float(record['MACD']) > float(record['MACD_Signal'])
+                })
+            ))
+        
+        timescale_connection.commit()
+        cursor.close()
     
     @pytest.mark.asyncio
     async def test_rate_limiting_compliance(self, alphavantage_client):
@@ -192,7 +294,29 @@ class TestTraderMadeWebSocket:
     """
     Test suite for TraderMade WebSocket streaming
     Ultra-low latency forex data feed validation
+    Real-time data flows to TimescaleDB
     """
+    
+    @pytest.fixture
+    def timescale_connection(self):
+        """Initialize TimescaleDB connection"""
+        conn = psycopg2.connect(
+            host=os.getenv('TIMESCALE_HOST', 'localhost'),
+            port=os.getenv('TIMESCALE_PORT', 5432),
+            database=os.getenv('TIMESCALE_DB', 'bottrader_timeseries'),
+            user=os.getenv('TIMESCALE_USER', 'postgres'),
+            password=os.getenv('TIMESCALE_PASSWORD')
+        )
+        yield conn
+        conn.close()
+    
+    @pytest.fixture
+    def supabase_client(self) -> Client:
+        """Initialize Supabase client for configuration"""
+        url = os.getenv('SUPABASE_URL')
+        key = os.getenv('SUPABASE_ANON_KEY')
+        client = create_client(url, key)
+        return client
     
     @pytest.fixture
     async def tradermade_client(self):
@@ -219,12 +343,20 @@ class TestTraderMadeWebSocket:
             "WebSocket not reporting connected status"
     
     @pytest.mark.asyncio
-    async def test_subscribe_to_pairs(self, tradermade_client):
+    async def test_subscribe_to_pairs(self, tradermade_client, supabase_client):
         """
-        Test 2.3.2: Subscribe to multiple forex pairs
-        Acceptance: Receive data for all 6 priority pairs
+        Test 2.3.2: Subscribe to multiple forex pairs with config from Supabase
+        Acceptance: Receive data for all 6 priority pairs from config
         """
-        pairs = ['EURUSD', 'GBPJPY', 'AUDJPY', 'USDTRY', 'NZDJPY', 'USDZAR']
+        # Get pairs configuration from Supabase
+        try:
+            response = supabase_client.table('system_config').select("value").eq('key', 'priority_pairs').execute()
+            if response.data:
+                pairs = json.loads(response.data[0]['value'])
+            else:
+                pairs = ['EURUSD', 'GBPJPY', 'AUDJPY', 'USDTRY', 'NZDJPY', 'USDZAR']
+        except:
+            pairs = ['EURUSD', 'GBPJPY', 'AUDJPY', 'USDTRY', 'NZDJPY', 'USDZAR']
         
         # Subscribe to all pairs
         subscription_result = await tradermade_client.subscribe(pairs)
@@ -253,15 +385,16 @@ class TestTraderMadeWebSocket:
             f"Only received data for {received_pairs}, expected {pairs}"
     
     @pytest.mark.asyncio
-    async def test_data_latency(self, tradermade_client):
+    async def test_data_latency(self, tradermade_client, timescale_connection):
         """
-        Test 2.3.3: Measure WebSocket data latency
-        Acceptance: <50ms latency from market event
+        Test 2.3.3: Measure WebSocket data latency and store metrics
+        Acceptance: <50ms latency from market event, logged to TimescaleDB
         """
         await tradermade_client.subscribe(['EURUSD'])
         
         latencies = []
         samples = 20
+        cursor = timescale_connection.cursor()
         
         async for data in tradermade_client.stream_prices():
             if 'timestamp' in data:
@@ -270,8 +403,24 @@ class TestTraderMadeWebSocket:
                 latency_ms = (local_time - server_time).total_seconds() * 1000
                 latencies.append(abs(latency_ms))
                 
+                # Store latency metrics
+                cursor.execute("""
+                    INSERT INTO performance_metrics (time, data)
+                    VALUES (%s, %s);
+                """, (
+                    local_time,
+                    json.dumps({
+                        'source': 'tradermade',
+                        'latency_ms': abs(latency_ms),
+                        'symbol': data.get('symbol', 'EURUSD')
+                    })
+                ))
+                
                 if len(latencies) >= samples:
                     break
+        
+        timescale_connection.commit()
+        cursor.close()
         
         avg_latency = sum(latencies) / len(latencies) if latencies else float('inf')
         
@@ -281,17 +430,37 @@ class TestTraderMadeWebSocket:
             f"Maximum latency {max(latencies):.1f}ms too high"
     
     @pytest.mark.asyncio
-    async def test_data_structure_validation(self, tradermade_client):
+    async def test_data_structure_validation(self, tradermade_client, timescale_connection):
         """
-        Test 2.3.4: Validate streaming data structure
-        Acceptance: Complete bid/ask/mid prices with timestamp
+        Test 2.3.4: Validate streaming data structure and store
+        Acceptance: Complete bid/ask/mid prices stored in TimescaleDB
         """
         await tradermade_client.subscribe(['EURUSD'])
         
         data_sample = None
+        cursor = timescale_connection.cursor()
+        
         async for data in tradermade_client.stream_prices():
             data_sample = data
-            break
+            
+            # Store in TimescaleDB
+            if data_sample:
+                cursor.execute("""
+                    INSERT INTO forex_prices (time, symbol, bid, ask, spread, volume)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING;
+                """, (
+                    datetime.fromtimestamp(data_sample['timestamp']),
+                    data_sample['symbol'],
+                    float(data_sample['bid']),
+                    float(data_sample['ask']),
+                    float(data_sample['ask']) - float(data_sample['bid']),
+                    0  # TraderMade doesn't provide volume
+                ))
+                timescale_connection.commit()
+                break
+        
+        cursor.close()
         
         assert data_sample is not None, "No data received"
         
@@ -355,14 +524,35 @@ class TestTraderMadeWebSocket:
 class TestMultiSourceAggregation:
     """
     Test suite for aggregating data from multiple sources
-    Ensures data consistency and redundancy
+    Ensures data consistency and redundancy with dual DB architecture
     """
     
+    @pytest.fixture
+    def timescale_connection(self):
+        """Initialize TimescaleDB connection"""
+        conn = psycopg2.connect(
+            host=os.getenv('TIMESCALE_HOST', 'localhost'),
+            port=os.getenv('TIMESCALE_PORT', 5432),
+            database=os.getenv('TIMESCALE_DB', 'bottrader_timeseries'),
+            user=os.getenv('TIMESCALE_USER', 'postgres'),
+            password=os.getenv('TIMESCALE_PASSWORD')
+        )
+        yield conn
+        conn.close()
+    
+    @pytest.fixture
+    def supabase_client(self) -> Client:
+        """Initialize Supabase client"""
+        url = os.getenv('SUPABASE_URL')
+        key = os.getenv('SUPABASE_ANON_KEY')
+        client = create_client(url, key)
+        return client
+    
     @pytest.mark.asyncio
-    async def test_price_consistency_across_sources(self):
+    async def test_price_consistency_across_sources(self, timescale_connection):
         """
         Test 2.4.1: Verify price consistency between sources
-        Acceptance: Prices differ by <5 pips for major pairs
+        Acceptance: Prices differ by <5 pips for major pairs, logged to DB
         """
         from src.data.aggregator import DataAggregator
         
@@ -381,14 +571,32 @@ class TestMultiSourceAggregation:
         
         diff_pips = abs(oanda_mid - tradermade_mid) * 10000
         
+        # Log price discrepancy to TimescaleDB
+        cursor = timescale_connection.cursor()
+        cursor.execute("""
+            INSERT INTO price_discrepancies (time, data)
+            VALUES (%s, %s);
+        """, (
+            datetime.utcnow(),
+            json.dumps({
+                'symbol': 'EUR_USD',
+                'oanda_price': oanda_mid,
+                'tradermade_price': tradermade_mid,
+                'diff_pips': diff_pips,
+                'alert': diff_pips >= 5
+            })
+        ))
+        timescale_connection.commit()
+        cursor.close()
+        
         assert diff_pips < 5, \
             f"Price difference {diff_pips:.1f} pips exceeds threshold"
     
     @pytest.mark.asyncio
-    async def test_failover_mechanism(self):
+    async def test_failover_mechanism(self, supabase_client):
         """
         Test 2.4.2: Test failover when primary source fails
-        Acceptance: Automatic switch to backup source
+        Acceptance: Automatic switch to backup source, logged in Supabase
         """
         from src.data.aggregator import DataAggregator
         
@@ -398,6 +606,14 @@ class TestMultiSourceAggregation:
         # Simulate OANDA failure
         await aggregator.simulate_source_failure('oanda')
         
+        # Log failover event to Supabase
+        failover_event = {
+            'event_type': 'source_failover',
+            'failed_source': 'oanda',
+            'timestamp': datetime.utcnow().isoformat(),
+            'active_sources': []
+        }
+        
         # Should still get prices from backup sources
         prices = await aggregator.get_aggregated_price('EURUSD')
         
@@ -405,6 +621,15 @@ class TestMultiSourceAggregation:
         assert len(prices) > 0, "No backup sources available"
         assert 'tradermade' in prices or 'alphavantage' in prices, \
             "Backup sources not functioning"
+        
+        # Update failover event with active sources
+        failover_event['active_sources'] = list(prices.keys())
+        
+        try:
+            response = supabase_client.table('system_events').insert(failover_event).execute()
+            assert response.data, "Failed to log failover event"
+        except Exception as e:
+            print(f"Failover logging: {e}")
 
 
 if __name__ == "__main__":

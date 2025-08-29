@@ -13,9 +13,10 @@ import sys
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from src.data.database.hybrid_manager import db_manager
+from src.data.database.supabase_only_manager import db_manager
 from src.data.connectors.oanda_connector import OandaV20Connector
 from src.data.connectors.alphavantage_connector import AlphaVantageConnector
+from src.data.redis_manager import redis_manager
 
 # Configure logging
 logging.basicConfig(
@@ -39,27 +40,34 @@ class ForexTradingBot:
         self.app.router.add_get('/health', self.health_check)
         self.app.router.add_get('/status', self.status_check)
         self.app.router.add_get('/metrics', self.metrics)
+        self.app.router.add_get('/cache/status', self.cache_status)
+        self.app.router.add_get('/cache/clear', self.clear_cache)
         self.app.router.add_get('/pairs', self.forex_pairs)
         self.app.router.add_get('/latest/{symbol}', self.latest_price)
         
     async def health_check(self, request):
-        """Health check endpoint for Railway"""
+        """Health check endpoint"""
         try:
-            # Test TimescaleDB connection
-            timescale_ok = bool(db_manager.timescale_pool)
-            
             # Test Supabase connection  
             supabase_ok = bool(db_manager.supabase)
             
+            # Test Redis connection
+            redis_status = redis_manager.get_health_status()
+            redis_ok = redis_status['redis_connected']
+            
+            # Service is healthy if Supabase is working
+            service_healthy = supabase_ok
+            
             health_status = {
-                'status': 'healthy' if (timescale_ok and supabase_ok) else 'degraded',
+                'status': 'healthy' if service_healthy else 'degraded',
                 'timestamp': datetime.utcnow().isoformat(),
                 'services': {
-                    'timescaledb': 'connected' if timescale_ok else 'disconnected',
                     'supabase': 'connected' if supabase_ok else 'disconnected',
+                    'redis': 'connected' if redis_ok else 'fallback_memory',
                     'oanda': 'connected' if self.oanda_client else 'disconnected',
                     'alphavantage': 'connected' if self.alpha_client else 'disconnected'
-                }
+                },
+                'redis_info': redis_status
             }
             
             status_code = 200 if health_status['status'] == 'healthy' else 503
@@ -173,15 +181,29 @@ class ForexTradingBot:
         symbol = request.match_info['symbol']
         
         try:
-            # TODO: Get real latest price from TimescaleDB
+            # Try to get price from Redis cache first
+            cached_price = redis_manager.get_price(symbol)
+            
+            if cached_price:
+                logger.info(f"Price for {symbol} retrieved from cache")
+                return web.json_response({
+                    **cached_price,
+                    'cache_hit': True
+                })
+            
+            # If not in cache, create mock price (in production, fetch from DB/API)
             mock_price = {
                 'symbol': symbol,
                 'bid': 1.2345,
                 'ask': 1.2347,
                 'spread': 0.0002,
                 'timestamp': datetime.utcnow().isoformat(),
-                'source': 'mock_data'
+                'source': 'mock_data',
+                'cache_hit': False
             }
+            
+            # Cache the price for 30 seconds
+            redis_manager.set_price(symbol, mock_price, ttl_seconds=30)
             
             return web.json_response(mock_price)
             
@@ -189,34 +211,82 @@ class ForexTradingBot:
             logger.error(f"Error getting price for {symbol}: {e}")
             return web.json_response({'error': str(e)}, status=500)
     
+    async def cache_status(self, request):
+        """Get Redis cache status and metrics"""
+        try:
+            cache_status = redis_manager.get_health_status()
+            return web.json_response(cache_status)
+            
+        except Exception as e:
+            logger.error(f"Error getting cache status: {e}")
+            return web.json_response({'error': str(e)}, status=500)
+    
+    async def clear_cache(self, request):
+        """Clear Redis cache"""
+        try:
+            # Get optional pattern from query parameters
+            pattern = request.query.get('pattern', None)
+            
+            success = redis_manager.clear_cache(pattern)
+            
+            result = {
+                'success': success,
+                'pattern': pattern or 'all',
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            if success:
+                logger.info(f"Cache cleared successfully with pattern: {pattern}")
+                return web.json_response(result)
+            else:
+                return web.json_response(result, status=500)
+            
+        except Exception as e:
+            logger.error(f"Error clearing cache: {e}")
+            return web.json_response({'error': str(e)}, status=500)
+    
     async def initialize_connections(self):
         """Initialize all external connections"""
         try:
             # Initialize database connections
             await db_manager.initialize()
-            await db_manager.create_forex_tables()
+            
+            # Create tables (this might fail if DB structure has issues)
+            try:
+                await db_manager.create_forex_tables()
+                logger.info("Database tables created/verified successfully")
+            except Exception as table_error:
+                logger.error(f"Failed to create/verify tables: {table_error}")
+                # Continue without tables for now
             
             # Initialize API connections if keys are available
             oanda_key = os.getenv('OANDA_API_KEY')
             oanda_account = os.getenv('OANDA_ACCOUNT_ID')
             
             if oanda_key and oanda_account:
-                self.oanda_client = OandaV20Connector(
-                    api_key=oanda_key,
-                    account_id=oanda_account,
-                    environment=os.getenv('OANDA_ENVIRONMENT', 'practice')
-                )
-                await self.oanda_client.initialize()
-                logger.info("OANDA client initialized")
+                try:
+                    self.oanda_client = OandaV20Connector(
+                        api_key=oanda_key,
+                        account_id=oanda_account,
+                        environment=os.getenv('OANDA_ENVIRONMENT', 'practice')
+                    )
+                    await self.oanda_client.initialize()
+                    logger.info("OANDA client initialized")
+                except Exception as oanda_error:
+                    logger.error(f"Failed to initialize OANDA client: {oanda_error}")
             
             alpha_key = os.getenv('ALPHA_VANTAGE_API_KEY')
             if alpha_key:
-                self.alpha_client = AlphaVantageConnector(api_key=alpha_key)
-                await self.alpha_client.initialize()
-                logger.info("Alpha Vantage client initialized")
+                try:
+                    self.alpha_client = AlphaVantageConnector(api_key=alpha_key)
+                    await self.alpha_client.initialize()
+                    logger.info("Alpha Vantage client initialized")
+                except Exception as alpha_error:
+                    logger.error(f"Failed to initialize Alpha Vantage client: {alpha_error}")
                 
         except Exception as e:
             logger.error(f"Failed to initialize connections: {e}")
+            # Don't re-raise the exception, let the app continue with partial functionality
     
     async def start_data_collection(self):
         """Start background data collection tasks"""

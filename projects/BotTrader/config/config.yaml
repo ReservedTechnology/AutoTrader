@@ -21,9 +21,10 @@ trading:
     end: "12:00"
   
 database:
-  timescale:
+  supabase:
     retention_days: 730  # 2 years
-    compression_after_days: 7
+    archive_after_days: 30  # Archive to storage after 30 days
+    materialized_view_refresh: 300  # 5 minutes
     
 monitoring:
   metrics_update_interval: 60  # seconds

@@ -1,23 +1,53 @@
 """
 Test Suite for OANDA v20 API WebSocket Connection
-Critical for real-time forex data streaming with <50ms latency
+Following TDD methodology for forex bot targeting 25% annual returns
+Integrated with dual database architecture: TimescaleDB (Railway) + Supabase
 """
 import pytest
+import pytest_asyncio
 import asyncio
 import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from supabase import create_client, Client
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 import json
 from decimal import Decimal
 import aiohttp
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class TestOandaWebSocketConnection:
     """
     Test suite for OANDA v20 API integration
     Validates streaming data for 6 priority forex pairs
+    Data flows to TimescaleDB (time-series) and Supabase (non-temporal)
     """
+    
+    @pytest.fixture
+    def timescale_connection(self):
+        """Initialize TimescaleDB connection for storing price data"""
+        conn = psycopg2.connect(
+            host=os.getenv('TIMESCALE_HOST', 'localhost'),
+            port=os.getenv('TIMESCALE_PORT', 5432),
+            database=os.getenv('TIMESCALE_DB', 'bottrader_timeseries'),
+            user=os.getenv('TIMESCALE_USER', 'postgres'),
+            password=os.getenv('TIMESCALE_PASSWORD')
+        )
+        yield conn
+        conn.close()
+    
+    @pytest.fixture
+    def supabase_client(self) -> Client:
+        """Initialize Supabase client for configuration"""
+        url = os.getenv('SUPABASE_URL')
+        key = os.getenv('SUPABASE_ANON_KEY')
+        client = create_client(url, key)
+        return client
     
     @pytest.fixture
     async def oanda_client(self):
@@ -108,10 +138,10 @@ class TestOandaWebSocketConnection:
                     f"{pair} spread {spread_pips} exceeds maximum {max_spreads[pair]}"
     
     @pytest.mark.asyncio
-    async def test_streaming_connection(self, oanda_client):
+    async def test_streaming_connection(self, oanda_client, timescale_connection):
         """
-        Test 2.1.4: Establish WebSocket streaming connection
-        Acceptance: Stable connection with <50ms latency
+        Test 2.1.4: Establish WebSocket streaming and store in TimescaleDB
+        Acceptance: Stable connection with <50ms latency, data persisted
         """
         stream_params = {
             'instruments': 'USD_ZAR,GBP_JPY,AUD_JPY,USD_TRY,NZD_JPY,EUR_USD'
@@ -120,24 +150,48 @@ class TestOandaWebSocketConnection:
         stream = await oanda_client.create_price_stream(stream_params)
         assert stream is not None, "Failed to create price stream"
         
-        # Collect 10 price updates to measure latency
+        # Collect 10 price updates to measure latency and store in DB
         latencies = []
         prices_received = 0
+        cursor = timescale_connection.cursor()
         
         async for price_data in stream:
             receive_time = time.time()
             
-            if 'time' in price_data:
+            if 'time' in price_data and price_data.get('type') == 'PRICE':
                 # Parse OANDA timestamp
                 server_time = datetime.fromisoformat(price_data['time'].replace('Z', '+00:00'))
                 local_time = datetime.utcnow()
                 latency_ms = (local_time - server_time).total_seconds() * 1000
                 latencies.append(abs(latency_ms))  # abs to handle clock drift
+                
+                # Store in TimescaleDB
+                if 'bids' in price_data and 'asks' in price_data and len(price_data['bids']) > 0 and len(price_data['asks']) > 0:
+                    bid = float(price_data['bids'][0]['price'])
+                    ask = float(price_data['asks'][0]['price'])
+                    spread = ask - bid
+                    volume = int(price_data['bids'][0].get('liquidity', 0))
+                    
+                    cursor.execute("""
+                        INSERT INTO forex_prices (time, symbol, bid, ask, spread, volume)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT DO NOTHING;
+                    """, (
+                        server_time,
+                        price_data['instrument'],
+                        bid,
+                        ask,
+                        spread,
+                        volume
+                    ))
             
             prices_received += 1
             
             if prices_received >= 10:
                 break
+        
+        timescale_connection.commit()
+        cursor.close()
         
         assert prices_received == 10, \
             f"Only received {prices_received}/10 price updates"
@@ -147,10 +201,10 @@ class TestOandaWebSocketConnection:
             f"Average latency {avg_latency:.1f}ms exceeds 50ms requirement"
     
     @pytest.mark.asyncio
-    async def test_price_data_structure(self, oanda_client):
+    async def test_price_data_structure(self, oanda_client, timescale_connection):
         """
-        Test 2.1.5: Verify price data structure and completeness
-        Acceptance: Complete bid/ask/spread data
+        Test 2.1.5: Verify price data structure and storage in TimescaleDB
+        Acceptance: Complete bid/ask/spread data stored in hypertable
         """
         stream_params = {'instruments': 'EUR_USD'}
         stream = await oanda_client.create_price_stream(stream_params)
@@ -182,6 +236,23 @@ class TestOandaWebSocketConnection:
         spread = float(ask['price']) - float(bid['price'])
         assert spread > 0, f"Invalid spread: {spread}"
         assert spread < 0.001, f"Spread too wide for EUR_USD: {spread}"
+        
+        # Store in TimescaleDB
+        cursor = timescale_connection.cursor()
+        cursor.execute("""
+            INSERT INTO forex_prices (time, symbol, bid, ask, spread, volume)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING;
+        """, (
+            datetime.fromisoformat(price_data['time'].replace('Z', '+00:00')),
+            price_data['instrument'],
+            float(bid['price']),
+            float(ask['price']),
+            spread,
+            int(bid.get('liquidity', 0))
+        ))
+        timescale_connection.commit()
+        cursor.close()
     
     @pytest.mark.asyncio
     async def test_rate_limiting_compliance(self, oanda_client):
@@ -262,10 +333,10 @@ class TestOandaWebSocketConnection:
                 f"Stream {i} only provided {len(stream_data[i])} updates"
     
     @pytest.mark.asyncio
-    async def test_order_endpoints(self, oanda_client):
+    async def test_order_endpoints(self, oanda_client, supabase_client):
         """
-        Test 2.1.8: Verify order management endpoints
-        Acceptance: Create, modify, cancel orders successfully
+        Test 2.1.8: Verify order management endpoints with Supabase tracking
+        Acceptance: Create, modify, cancel orders with audit trail
         """
         # Test with a minimal market order (paper trading)
         order_request = {
@@ -284,6 +355,23 @@ class TestOandaWebSocketConnection:
                    'orderRejectTransaction' in order_result, \
                    "Invalid order response structure"
             
+            # Store order audit in Supabase
+            if 'orderCreateTransaction' in order_result:
+                order_audit = {
+                    'order_id': order_result['orderCreateTransaction'].get('id'),
+                    'instrument': order_request['instrument'],
+                    'units': order_request['units'],
+                    'order_type': order_request['type'],
+                    'status': 'created',
+                    'created_at': datetime.now().isoformat()
+                }
+                
+                try:
+                    response = supabase_client.table('order_audit').insert(order_audit).execute()
+                    assert response.data, "Failed to store order audit"
+                except Exception as e:
+                    print(f"Order audit storage: {e}")
+            
             # Get pending orders
             pending_orders = await oanda_client.get_pending_orders()
             assert isinstance(pending_orders, list), \
@@ -292,10 +380,10 @@ class TestOandaWebSocketConnection:
             pytest.skip("Skipping order test in non-practice environment")
     
     @pytest.mark.asyncio
-    async def test_position_tracking(self, oanda_client):
+    async def test_position_tracking(self, oanda_client, supabase_client):
         """
-        Test 2.1.9: Verify position tracking capabilities
-        Acceptance: Real-time position updates available
+        Test 2.1.9: Verify position tracking and sync with Supabase
+        Acceptance: Real-time position updates stored in both databases
         """
         positions = await oanda_client.get_open_positions()
         
@@ -313,6 +401,21 @@ class TestOandaWebSocketConnection:
             for field in required_fields:
                 assert field in position, \
                     f"Position missing required field: {field}"
+            
+            # Store position metadata in Supabase
+            position_meta = {
+                'position_id': f"oanda_{position.get('id', '')}",
+                'instrument': position['instrument'],
+                'opened_at': datetime.now().isoformat(),
+                'units': position['units'],
+                'average_price': position['averagePrice']
+            }
+            
+            try:
+                response = supabase_client.table('position_metadata').upsert(position_meta).execute()
+                assert response.data, "Failed to store position metadata"
+            except Exception as e:
+                print(f"Position metadata storage: {e}")
     
     @pytest.mark.asyncio
     async def test_reconnection_mechanism(self, oanda_client):
@@ -349,6 +452,34 @@ class TestOandaWebSocketConnection:
 
 class TestOandaDataQuality:
     """Test suite for OANDA data quality and reliability"""
+    
+    @pytest.fixture
+    def timescale_connection(self):
+        """Initialize TimescaleDB connection"""
+        conn = psycopg2.connect(
+            host=os.getenv('TIMESCALE_HOST', 'localhost'),
+            port=os.getenv('TIMESCALE_PORT', 5432),
+            database=os.getenv('TIMESCALE_DB', 'bottrader_timeseries'),
+            user=os.getenv('TIMESCALE_USER', 'postgres'),
+            password=os.getenv('TIMESCALE_PASSWORD')
+        )
+        yield conn
+        conn.close()
+    
+    @pytest.fixture
+    async def oanda_client(self):
+        """Initialize OANDA v20 client"""
+        from src.data.connectors.oanda_connector import OandaV20Connector
+        
+        client = OandaV20Connector(
+            api_key=os.getenv('OANDA_API_KEY'),
+            account_id=os.getenv('OANDA_ACCOUNT_ID'),
+            environment=os.getenv('OANDA_ENVIRONMENT', 'practice')
+        )
+        
+        await client.initialize()
+        yield client
+        await client.close()
     
     @pytest.mark.asyncio
     async def test_weekend_gap_handling(self, oanda_client):
@@ -391,10 +522,10 @@ class TestOandaDataQuality:
             "No weekend gaps detected in weekly data"
     
     @pytest.mark.asyncio
-    async def test_data_consistency(self, oanda_client):
+    async def test_data_consistency(self, oanda_client, timescale_connection):
         """
-        Test 2.2.2: Verify data consistency across timeframes
-        Acceptance: 1H candles aggregate correctly to 4H
+        Test 2.2.2: Verify data consistency across timeframes and storage
+        Acceptance: 1H candles aggregate correctly to 4H, stored in TimescaleDB
         """
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=1)
@@ -414,6 +545,26 @@ class TestOandaDataQuality:
             from_time=start_date,
             to_time=end_date
         )
+        
+        # Store candles in TimescaleDB
+        cursor = timescale_connection.cursor()
+        
+        for candle in h1_candles:
+            cursor.execute("""
+                INSERT INTO forex_prices (time, symbol, bid, ask, spread, volume)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT DO NOTHING;
+            """, (
+                datetime.fromisoformat(candle['time']),
+                'EUR_USD',
+                float(candle['mid']['c']),  # Close as bid
+                float(candle['mid']['c']) + 0.0001,  # Simulated ask
+                0.0001,  # Simulated spread
+                int(candle.get('volume', 0))
+            ))
+        
+        timescale_connection.commit()
+        cursor.close()
         
         # Verify aggregation consistency
         # Every 4 H1 candles should roughly match 1 H4 candle

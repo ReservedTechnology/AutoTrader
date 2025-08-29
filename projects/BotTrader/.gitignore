@@ -44,6 +44,7 @@ config/.env
 .coverage
 .pytest_cache/
 htmlcov/
+coverage.xml
 .tox/
 .coverage.*
 *.cover

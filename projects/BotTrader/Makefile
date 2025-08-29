@@ -102,8 +102,5 @@ logs: ## Tail application logs
 
 ##@ Deployment
 
-deploy-railway: ## Deploy to Railway
-	railway up
-
-deploy-check: ## Check deployment status
-	railway status
+deploy: ## Deploy to your platform
+	@echo "Configure deployment in your platform of choice"

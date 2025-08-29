@@ -1,12 +1,16 @@
 # Core Dependencies for Railway Deployment
 aiohttp==3.9.5
 asyncpg==0.29.0
-supabase==2.3.0
+supabase==2.1.0
 python-dotenv==1.0.0
 pyyaml==6.0.0
 
 # Database
 psycopg2-binary==2.9.9
+
+# Redis for caching and queues
+redis>=5.0.0
+aioredis>=2.0.0
 
 # API Connections
 requests==2.31.0
