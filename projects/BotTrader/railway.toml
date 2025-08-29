@@ -3,7 +3,7 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "docker-compose up -d"
+startCommand = "python -m src.core.main"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "on-failure"
@@ -44,15 +44,15 @@ volumes = [
 name = "bottrader-app"
 source = "."
 port = 8000
-replicas = 2
+replicas = 1
 memory = "1GB"
 cpu = "0.5"
 dependsOn = ["timescaledb", "redis"]
 
-# Data Collector Service
+# Data Collector Service - Forex Price Ingestion to TimescaleDB
 [[services]]
 name = "data-collector"
-source = "src/services/data_collector.py"
+source = "."
 port = 8001
 replicas = 2
 memory = "512MB"
@@ -83,5 +83,14 @@ dependsOn = ["timescaledb", "redis"]
 PYTHON_VERSION = "3.11"
 NODE_ENV = "production"
 TZ = "UTC"
-POSTGRES_DB = "bottrader"
-POSTGRES_USER = "postgres"
+
+# TimescaleDB será provisto automáticamente por Railway como DATABASE_URL
+# Supabase y APIs se configuran manualmente en Railway dashboard:
+# SUPABASE_URL = "https://tu-proyecto.supabase.co"
+# SUPABASE_ANON_KEY = "tu_anon_key"
+# SUPABASE_SERVICE_KEY = "tu_service_key"
+# OANDA_API_KEY = "tu_oanda_key"
+# OANDA_ACCOUNT_ID = "tu_oanda_account"
+# OANDA_ENVIRONMENT = "practice"
+# ALPHA_VANTAGE_API_KEY = "tu_alpha_key"
+# TRADERMADE_API_KEY = "tu_tradermade_key"

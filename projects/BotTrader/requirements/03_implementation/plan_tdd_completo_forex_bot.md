@@ -11,7 +11,8 @@ Este plan TDD (Test-Driven Development) proporciona una estructura completa de t
 - Profit Factor: >1.75
 
 **Infraestructura Tecnológica**:
-- Base de datos: Supabase con TimescaleDB
+- Base de datos temporal: TimescaleDB en Railway (time-series data)
+- Base de datos no temporal: Supabase (configuraciones, usuarios, trading history)
 - Deployment: Railway
 - APIs principales: OANDA v20, Alpha Vantage, TraderMade
 - Modelos ML: Transformers (primario), LSTM, XGBoost
@@ -19,8 +20,7 @@ Este plan TDD (Test-Driven Development) proporciona una estructura completa de t
 ---
 
 ## 1. ESTRUCTURA DE TESTS ORGANIZADOS POR ORDEN DE EJECUCIÓN
-
-### 1.1 Tests de Infraestructura (Supabase TimescaleDB, Railway)
+### 1.1 Tests de Infraestructura (TimescaleDB en Railway, Supabase)
 ### 1.2 Tests de Conexiones API (OANDA v20, Alpha Vantage, TraderMade)
 ### 1.3 Tests de Ingesta de Datos (6 pares específicos, múltiples timeframes)
 ### 1.4 Tests de Modelos ML (Transformers, LSTM, XGBoost)
@@ -34,60 +34,89 @@ Este plan TDD (Test-Driven Development) proporciona una estructura completa de t
 
 ## 2. PROMPTS DETALLADOS PARA CADA CATEGORÍA DE TESTS
 
-## 2.1 Tests de Infraestructura (Supabase TimescaleDB, Railway)
+## 2.1 Tests de Infraestructura (TimescaleDB en Railway, Supabase)
 
-### 2.1.1 Test de Configuración Supabase con TimescaleDB
+### 2.1.1 Test de Configuración Dual: TimescaleDB (Railway) + Supabase
 
-**Objetivo**: Verificar la configuración correcta de la base de datos de series temporales para almacenar datos forex de alta frecuencia.
+**Objetivo**: Verificar la configuración correcta del sistema de bases de datos dual: TimescaleDB en Railway para series temporales y Supabase para datos no temporales.
 
-**Especificaciones Técnicas**:
-- **Base de datos**: Supabase con extensión TimescaleDB habilitada
-- **Tablas principales**:
+**Especificaciones Técnicas - TimescaleDB (Railway)**:
+- **Base de datos**: PostgreSQL con extensión TimescaleDB en Railway
+- **Tablas de series temporales**:
   - `forex_prices`: timestamp, symbol, bid, ask, spread, volume
   - `economic_calendar`: timestamp, currency, event, impact, actual, forecast, previous
   - `ml_predictions`: timestamp, symbol, model_type, prediction, confidence
   - `trading_signals`: timestamp, symbol, signal_type, strength, indicators_used
-  - `portfolio_positions`: timestamp, symbol, position_size, entry_price, stop_loss, take_profit
+  - `live_positions`: timestamp, symbol, position_size, entry_price, stop_loss, take_profit
 
-**Configuraciones Específicas**:
+**Especificaciones Técnicas - Supabase**:
+- **Base de datos**: PostgreSQL estándar en Supabase
+- **Tablas no temporales**:
+  - `users`: id, email, api_keys, settings, created_at
+  - `trading_strategies`: id, name, parameters, active, created_at
+  - `closed_trades`: id, symbol, entry_time, exit_time, profit_loss, strategy_used
+  - `system_config`: key, value, description, updated_at
+  - `ml_model_versions`: id, model_type, version, parameters, performance_metrics
+
+**Configuraciones Específicas - TimescaleDB (Railway)**:
 - **Particionado temporal**: Por día para tablas de precios
-- **Índices**: timestamp + symbol para todas las tablas principales
+- **Índices**: timestamp + symbol para todas las tablas de series temporales
 - **Retención de datos**: 2 años para precios históricos, 30 días para señales
 - **Compresión**: Automática cada 7 días para datos >1 semana
+- **Chunks**: 1 día para forex_prices, 7 días para otras tablas
 
-**Criterios de Aceptación**:
-- Conexión exitosa a Supabase con credenciales válidas
-- TimescaleDB extension activada y funcional
-- Creación de hypertables para series temporales
-- Inserción de >10K registros de prueba en <5 segundos
-- Consultas de agregación (OHLC diario) completadas en <500ms
+**Configuraciones Específicas - Supabase**:
+- **Row-Level Security (RLS)**: Habilitado para todas las tablas
+- **Realtime subscriptions**: Para system_config y trading_strategies
+- **Backup**: Automático diario con retención de 30 días
+- **Índices**: Por id y created_at para queries eficientes
 
-**Consideraciones de Arquitectura**:
-- Configurar row-level security (RLS) para isolation de datos por usuario
-- Implementar backup automático diario
-- Establecer connection pooling para manejo de múltiples connections API
-- Configurar monitoring de performance con alertas por latencia >1s
+**Criterios de Aceptación - Sistema Dual**:
+- Conexión exitosa a TimescaleDB en Railway para datos temporales
+- Conexión exitosa a Supabase para datos no temporales
+- TimescaleDB extension activada y funcional en Railway
+- Creación de hypertables para series temporales en Railway
+- Inserción de >10K registros de prueba en <5 segundos (TimescaleDB)
+- Consultas de agregación (OHLC diario) completadas en <500ms (TimescaleDB)
+- Sincronización de closed_trades entre TimescaleDB y Supabase
+- Queries cross-database funcionando correctamente
 
-### 2.1.2 Test de Deployment en Railway
+**Consideraciones de Arquitectura - Sistema Dual**:
+- Connection pooling separado para cada base de datos
+- Sincronización asíncrona de trades cerrados a Supabase
+- Cache Redis para reducir queries cross-database
+- Monitoring de performance para ambas bases de datos
+- Fallback a Supabase si TimescaleDB no disponible (read-only mode)
+- Data consistency checks entre ambas bases de datos
 
-**Objetivo**: Validar el deployment automatizado y escalado de la aplicación en Railway.
+### 2.1.2 Test de Deployment en Railway con TimescaleDB
+
+**Objetivo**: Validar el deployment automatizado de la aplicación y TimescaleDB en Railway.
 
 **Especificaciones de Deployment**:
 - **Runtime**: Python 3.11+ con requirements.txt
+- **Database Service**: PostgreSQL con TimescaleDB extension
 - **Environment variables**: 
-  - `SUPABASE_URL`, `SUPABASE_KEY`
+  - `TIMESCALE_URL`, `TIMESCALE_USER`, `TIMESCALE_PASSWORD` (Railway)
+  - `SUPABASE_URL`, `SUPABASE_KEY` (Supabase)
   - `OANDA_API_KEY`, `OANDA_ACCOUNT_ID`
   - `ALPHA_VANTAGE_KEY`, `TRADERMADE_KEY`
-- **Health checks**: Endpoint `/health` respondiendo status 200
-- **Resource limits**: 512MB RAM mínimo, 1GB recomendado
+- **Health checks**: 
+  - Endpoint `/health` respondiendo status 200
+  - Endpoint `/health/db` verificando ambas conexiones
+- **Resource limits**: 
+  - App: 512MB RAM mínimo, 1GB recomendado
+  - TimescaleDB: 1GB RAM mínimo, 2GB recomendado
 
 **Criterios de Aceptación**:
 - Build exitoso desde GitHub repository
 - Aplicación accesible via URL public railway.app
-- Variables de entorno configuradas y accesibles
+- TimescaleDB service running en Railway
+- Variables de entorno configuradas para ambas DBs
 - Logs estructurados disponibles en Railway dashboard
-- Health check endpoint funcionando correctamente
+- Health check endpoints verificando ambas DBs
 - Restart automático en caso de crash
+- Data persistence verificada tras restart
 
 **Patrones de Desarrollo Recomendados**:
 - Usar Docker con multi-stage builds para optimización
@@ -627,7 +656,7 @@ Este plan TDD (Test-Driven Development) proporciona una estructura completa de t
 
 **Scenarios de Fallo**:
 - **API Outage**: Primary data provider down >5 minutos
-- **Database Failure**: Supabase connectivity lost
+- **Database Failure**: TimescaleDB o Supabase connectivity lost
 - **Model Failure**: ML prediction accuracy drops <30%
 - **Network Issues**: Internet connectivity intermittent
 - **Railway Deployment**: Application crash o memory issues
@@ -710,7 +739,7 @@ La inversión en comprehensive testing al inicio del proyecto pagará dividendos
 ---
 
 **Próximos Pasos**:
-1. Setup inicial infrastructure (Supabase + Railway)
+1. Setup inicial infrastructure (TimescaleDB en Railway + Supabase)
 2. Implement tests de infrastructure y connectivity
 3. Desarrollar data ingestion pipeline
 4. Train y validate ML models
