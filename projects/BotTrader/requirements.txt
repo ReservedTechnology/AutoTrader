@@ -16,18 +16,14 @@ websocket-client==1.7.0
 websockets==12.0
 requests==2.31.0
 
-# Machine Learning
-tensorflow==2.15.0
-torch==2.1.2
-scikit-learn==1.3.2
-xgboost==2.0.3
-transformers==4.36.2
-numpy==1.24.3
-pandas==2.1.4
+# Machine Learning (básico para empezar)
+scikit-learn>=1.3.0
+numpy>=1.24.0
+pandas>=2.1.0
 
 # Technical Analysis
-ta-lib==0.4.28
-talib==0.4.19
+ta-lib>=0.4.25
+pandas-ta>=0.3.14b
 pandas-ta==0.3.14b0
 
 # Sentiment Analysis
