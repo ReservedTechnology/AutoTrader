@@ -6,91 +6,21 @@ dockerfilePath = "Dockerfile"
 startCommand = "python -m src.core.main"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
-restartPolicyType = "on-failure"
+restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
-
-# TimescaleDB Database Service
-[[services]]
-name = "timescaledb"
-image = "timescale/timescaledb:latest-pg15"
-port = 5432
-replicas = 1
-memory = "2GB"
-cpu = "1.0"
-volumes = [
-  { mount = "/var/lib/postgresql/data", size = "10GB" }
-]
-healthcheck = {
-  command = ["pg_isready", "-U", "postgres"],
-  interval = 10,
-  timeout = 5,
-  retries = 5
-}
-
-# Redis Cache Service
-[[services]]
-name = "redis"
-image = "redis:7-alpine"
-port = 6379
-replicas = 1
-memory = "256MB"
-cpu = "0.25"
-volumes = [
-  { mount = "/data", size = "1GB" }
-]
-
-# Main BotTrader Application
-[[services]]
-name = "bottrader-app"
-source = "."
-port = 8000
-replicas = 1
-memory = "1GB"
-cpu = "0.5"
-dependsOn = ["timescaledb", "redis"]
-
-# Data Collector Service - Forex Price Ingestion to TimescaleDB
-[[services]]
-name = "data-collector"
-source = "."
-port = 8001
-replicas = 2
-memory = "512MB"
-cpu = "0.5"
-dependsOn = ["timescaledb"]
-
-# ML Predictor Service
-[[services]]
-name = "ml-predictor"
-source = "src/services/ml_predictor.py"
-port = 8002
-replicas = 3
-memory = "1GB"
-cpu = "1.0"
-dependsOn = ["timescaledb", "redis"]
-
-# Trading Engine Service
-[[services]]
-name = "trading-engine"
-source = "src/services/trading_engine.py"
-port = 8003
-replicas = 2
-memory = "512MB"
-cpu = "0.5"
-dependsOn = ["timescaledb", "redis"]
 
 [env]
 PYTHON_VERSION = "3.11"
 NODE_ENV = "production"
 TZ = "UTC"
 
-# TimescaleDB será provisto automáticamente por Railway como DATABASE_URL
-# Supabase y APIs se configuran manualmente en Railway dashboard:
-# SUPABASE_URL = "https://tu-proyecto.supabase.co"
-# SUPABASE_ANON_KEY = "tu_anon_key"
-# SUPABASE_SERVICE_KEY = "tu_service_key"
-# OANDA_API_KEY = "tu_oanda_key"
-# OANDA_ACCOUNT_ID = "tu_oanda_account"
-# OANDA_ENVIRONMENT = "practice"
-# ALPHA_VANTAGE_API_KEY = "tu_alpha_key"
-# TRADERMADE_API_KEY = "tu_tradermade_key"
+# Variables de entorno para conexiones externas se configuran en Railway dashboard:
+# DATABASE_URL - Referencia automática a PostgreSQL service
+# SUPABASE_URL - URL de tu proyecto Supabase
+# SUPABASE_ANON_KEY - Clave pública de Supabase
+# SUPABASE_SERVICE_KEY - Clave de servicio de Supabase
+# OANDA_API_KEY - API key de OANDA
+# OANDA_ACCOUNT_ID - ID de cuenta OANDA
+# OANDA_ENVIRONMENT - practice/live
+# ALPHA_VANTAGE_API_KEY - API key de Alpha Vantage
+# TRADERMADE_API_KEY - API key de TraderMade
