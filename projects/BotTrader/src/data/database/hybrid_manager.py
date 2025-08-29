@@ -52,13 +52,13 @@ class HybridDatabaseManager:
                     max_queries=50000
                 )
                 
-                # Enable TimescaleDB extension
-                async with self.timescale_pool.acquire() as conn:
-                    await conn.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
+                # Enable TimescaleDB extension - DISABLED for Railway
+                # async with self.timescale_pool.acquire() as conn:
+                #     await conn.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
                     
-                logger.info("TimescaleDB connection established")
+                logger.info("PostgreSQL connection established")
             except Exception as e:
-                logger.error(f"Failed to connect to TimescaleDB: {e}")
+                logger.error(f"Failed to connect to PostgreSQL: {e}")
     
     async def _init_supabase(self):
         """Initialize Supabase connections"""
@@ -96,18 +96,18 @@ class HybridDatabaseManager:
                 );
             """)
             
-            # Convert to hypertable (TimescaleDB)
-            try:
-                await conn.execute("""
-                    SELECT create_hypertable('forex_prices', 'timestamp', 
-                        chunk_time_interval => INTERVAL '1 day',
-                        if_not_exists => TRUE
-                    );
-                """)
-            except Exception as e:
-                logger.warning(f"Hypertable creation warning: {e}")
+            # Convert to hypertable (TimescaleDB) - DISABLED for Railway
+            # try:
+            #     await conn.execute("""
+            #         SELECT create_hypertable('forex_prices', 'timestamp', 
+            #             chunk_time_interval => INTERVAL '1 day',
+            #             if_not_exists => TRUE
+            #         );
+            #     """)
+            # except Exception as e:
+            #     logger.warning(f"Hypertable creation warning: {e}")
             
-            # Create indexes for performance
+            # Create standard PostgreSQL indexes for performance
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_forex_prices_symbol_time 
                 ON forex_prices (symbol, timestamp DESC);
@@ -127,18 +127,18 @@ class HybridDatabaseManager:
                 );
             """)
             
-            # Convert signals to hypertable
-            try:
-                await conn.execute("""
-                    SELECT create_hypertable('trading_signals', 'timestamp',
-                        chunk_time_interval => INTERVAL '1 day',
-                        if_not_exists => TRUE
-                    );
-                """)
-            except Exception as e:
-                logger.warning(f"Signals hypertable creation warning: {e}")
+            # Convert signals to hypertable - DISABLED for Railway
+            # try:
+            #     await conn.execute("""
+            #         SELECT create_hypertable('trading_signals', 'timestamp',
+            #             chunk_time_interval => INTERVAL '1 day',
+            #             if_not_exists => TRUE
+            #         );
+            #     """)
+            # except Exception as e:
+            #     logger.warning(f"Signals hypertable creation warning: {e}")
             
-        logger.info("TimescaleDB forex tables created")
+        logger.info("PostgreSQL forex tables created")
     
     async def insert_forex_prices(self, prices_data: List[Dict]) -> int:
         """Insert forex prices into TimescaleDB"""
