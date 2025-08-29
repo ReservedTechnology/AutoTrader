@@ -1,0 +1,119 @@
+ml_models:
+  transformer:
+    architecture:
+      type: "encoder-only"
+      attention_heads: 12
+      embedding_dim: 256
+      sequence_length: 128
+      num_layers: 6
+      dropout: 0.15
+      
+    training:
+      batch_size: 32
+      epochs: 100
+      learning_rate: 0.0001
+      optimizer: "AdamW"
+      loss_function: "MSE"
+      early_stopping_patience: 10
+      
+    validation:
+      train_split: 0.70
+      val_split: 0.15
+      test_split: 0.15
+      walk_forward: true
+      window_size_days: 30
+      
+    performance_targets:
+      sharpe_ratio: 4.4
+      annual_return: 0.187  # 18.7%
+      
+  lstm:
+    architecture:
+      lstm_units: [128, 64, 32]
+      dense_layers: [64, 32, 16]
+      activation: "tanh"
+      recurrent_activation: "sigmoid"
+      dropout: 0.20
+      recurrent_dropout: 0.15
+      
+    features:
+      window_temporal: 60
+      prediction_horizon: 1
+      
+    performance_targets:
+      accuracy: 0.73  # 73%
+      
+  xgboost:
+    hyperparameters:
+      n_estimators: 1000
+      max_depth: 6
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+      min_child_weight: 3
+      gamma: 0.1
+      reg_alpha: 0.1
+      reg_lambda: 1.0
+      random_state: 42
+      
+    early_stopping:
+      rounds: 50
+      eval_metric: "rmse"
+      
+    feature_importance:
+      method: "gain"
+      top_features: 30
+      threshold_min: 0.01
+      
+technical_indicators:
+  rsi:
+    day_trading:
+      period: 9
+      overbought: 75
+      oversold: 25
+      
+    swing_trading:
+      period: 14
+      overbought: 70
+      oversold: 30
+      
+  macd:
+    standard:
+      fast: 12
+      slow: 26
+      signal: 9
+      
+    sensitive:
+      fast: 8
+      slow: 17
+      signal: 9
+      
+  bollinger_bands:
+    period: 20
+    std_dev:
+      low_volatility: 1.5
+      normal: 2.0
+      high_volatility: 2.5
+      
+feature_engineering:
+  technical_features:
+    - "RSI"
+    - "MACD"
+    - "Bollinger_Bands"
+    - "ATR"
+    - "Stochastic"
+    - "CCI"
+    - "Moving_Averages"
+    
+  macro_features:
+    - "interest_rates"
+    - "inflation"
+    - "gdp_growth"
+    - "unemployment"
+    - "market_indices"
+    
+  sentiment_features:
+    - "news_sentiment"
+    - "twitter_sentiment"
+    - "reddit_sentiment"
+    - "vix_fear_index"

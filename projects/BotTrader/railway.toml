@@ -1,0 +1,87 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "docker-compose up -d"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 3
+
+# TimescaleDB Database Service
+[[services]]
+name = "timescaledb"
+image = "timescale/timescaledb:latest-pg15"
+port = 5432
+replicas = 1
+memory = "2GB"
+cpu = "1.0"
+volumes = [
+  { mount = "/var/lib/postgresql/data", size = "10GB" }
+]
+healthcheck = {
+  command = ["pg_isready", "-U", "postgres"],
+  interval = 10,
+  timeout = 5,
+  retries = 5
+}
+
+# Redis Cache Service
+[[services]]
+name = "redis"
+image = "redis:7-alpine"
+port = 6379
+replicas = 1
+memory = "256MB"
+cpu = "0.25"
+volumes = [
+  { mount = "/data", size = "1GB" }
+]
+
+# Main BotTrader Application
+[[services]]
+name = "bottrader-app"
+source = "."
+port = 8000
+replicas = 2
+memory = "1GB"
+cpu = "0.5"
+dependsOn = ["timescaledb", "redis"]
+
+# Data Collector Service
+[[services]]
+name = "data-collector"
+source = "src/services/data_collector.py"
+port = 8001
+replicas = 2
+memory = "512MB"
+cpu = "0.5"
+dependsOn = ["timescaledb"]
+
+# ML Predictor Service
+[[services]]
+name = "ml-predictor"
+source = "src/services/ml_predictor.py"
+port = 8002
+replicas = 3
+memory = "1GB"
+cpu = "1.0"
+dependsOn = ["timescaledb", "redis"]
+
+# Trading Engine Service
+[[services]]
+name = "trading-engine"
+source = "src/services/trading_engine.py"
+port = 8003
+replicas = 2
+memory = "512MB"
+cpu = "0.5"
+dependsOn = ["timescaledb", "redis"]
+
+[env]
+PYTHON_VERSION = "3.11"
+NODE_ENV = "production"
+TZ = "UTC"
+POSTGRES_DB = "bottrader"
+POSTGRES_USER = "postgres"

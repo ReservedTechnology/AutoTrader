@@ -1,0 +1,313 @@
+{
+  "price_data": {
+    "EURUSD=X": {
+      "symbol": "EURUSD=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "GBPJPY=X": {
+      "symbol": "GBPJPY=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "AUDJPY=X": {
+      "symbol": "AUDJPY=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "USDJPY=X": {
+      "symbol": "USDJPY=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "GBPUSD=X": {
+      "symbol": "GBPUSD=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "AUDUSD=X": {
+      "symbol": "AUDUSD=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "USDCAD=X": {
+      "symbol": "USDCAD=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "NZDJPY=X": {
+      "symbol": "NZDJPY=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "CADJPY=X": {
+      "symbol": "CADJPY=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    },
+    "EURJPY=X": {
+      "symbol": "EURJPY=X",
+      "success": false,
+      "error": "Unknown error: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+    }
+  },
+  "info_data": {
+    "EURUSD=X": {
+      "symbol": "EURUSD=X",
+      "success": true,
+      "data": {
+        "symbol": "EURUSD=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 1.0183818,
+          "high": 1.183026
+        },
+        "moving_averages": {
+          "fifty_day": 1.1656373,
+          "two_hundred_day": 1.0986344
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "GBPJPY=X": {
+      "symbol": "GBPJPY=X",
+      "success": true,
+      "data": {
+        "symbol": "GBPJPY=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 183.784,
+          "high": 200.95
+        },
+        "moving_averages": {
+          "fifty_day": 198.16698,
+          "two_hundred_day": 194.0532
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "AUDJPY=X": {
+      "symbol": "AUDJPY=X",
+      "success": true,
+      "data": {
+        "symbol": "AUDJPY=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 86.176,
+          "high": 102.385
+        },
+        "moving_averages": {
+          "fifty_day": 95.68122,
+          "two_hundred_day": 95.19315
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "USDJPY=X": {
+      "symbol": "USDJPY=X",
+      "success": true,
+      "data": {
+        "symbol": "USDJPY=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 139.578,
+          "high": 158.857
+        },
+        "moving_averages": {
+          "fifty_day": 146.853,
+          "two_hundred_day": 149.12614
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "GBPUSD=X": {
+      "symbol": "GBPUSD=X",
+      "success": true,
+      "data": {
+        "symbol": "GBPUSD=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 1.2101264,
+          "high": 1.378873
+        },
+        "moving_averages": {
+          "fifty_day": 1.3495412,
+          "two_hundred_day": 1.3009897
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "AUDUSD=X": {
+      "symbol": "AUDUSD=X",
+      "success": true,
+      "data": {
+        "symbol": "AUDUSD=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 0.5923083,
+          "high": 0.6941099
+        },
+        "moving_averages": {
+          "fifty_day": 0.65165,
+          "two_hundred_day": 0.6384203
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "USDCAD=X": {
+      "symbol": "USDCAD=X",
+      "success": true,
+      "data": {
+        "symbol": "USDCAD=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 1.3419,
+          "high": 1.4791
+        },
+        "moving_averages": {
+          "fifty_day": 1.3728126,
+          "two_hundred_day": 1.4034406
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "NZDJPY=X": {
+      "symbol": "NZDJPY=X",
+      "success": true,
+      "data": {
+        "symbol": "NZDJPY=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 79.777,
+          "high": 93.0
+        },
+        "moving_averages": {
+          "fifty_day": 87.66001,
+          "two_hundred_day": 86.93221
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "CADJPY=X": {
+      "symbol": "CADJPY=X",
+      "success": true,
+      "data": {
+        "symbol": "CADJPY=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 101.257,
+          "high": 111.555
+        },
+        "moving_averages": {
+          "fifty_day": 106.95956,
+          "two_hundred_day": 106.24074
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    },
+    "EURJPY=X": {
+      "symbol": "EURJPY=X",
+      "success": true,
+      "data": {
+        "symbol": "EURJPY=X",
+        "market_cap": 0.0,
+        "pe_ratio": 0.0,
+        "forward_pe": 0.0,
+        "dividend_yield": 0.0,
+        "beta": 0.0,
+        "fifty_two_week": {
+          "low": 154.813,
+          "high": 173.873
+        },
+        "moving_averages": {
+          "fifty_day": 171.16615,
+          "two_hundred_day": 163.99484
+        },
+        "volume": {
+          "current": 0,
+          "average": 0
+        }
+      }
+    }
+  },
+  "metadata": {
+    "start_date": "2025-02-28",
+    "end_date": "2025-08-28",
+    "pairs_analyzed": [
+      "EURUSD=X",
+      "GBPJPY=X",
+      "AUDJPY=X",
+      "USDJPY=X",
+      "GBPUSD=X",
+      "AUDUSD=X",
+      "USDCAD=X",
+      "NZDJPY=X",
+      "CADJPY=X",
+      "EURJPY=X"
+    ],
+    "fetch_timestamp": "2025-08-28T22:17:57.377781"
+  }
+}

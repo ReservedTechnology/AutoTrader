@@ -1,0 +1,117 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment Variables
+.env
+config/.env
+*.env.local
+*.env.*.local
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.coverage.*
+*.cover
+.hypothesis/
+
+# Machine Learning
+models/*.pkl
+models/*.h5
+models/*.pt
+models/*.pth
+models/*.joblib
+*.checkpoint
+*.ckpt
+
+# Data
+data/*.csv
+data/*.json
+data/*.parquet
+data/cache/
+data/raw/
+data/processed/
+
+# Logs
+logs/
+*.log
+*.out
+*.err
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# Documentation
+docs/_build/
+site/
+
+# Package managers
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Railway
+.railway/
+
+# Docker
+.dockerignore
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+.Trash-*
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib
+
+# API Keys and Secrets
+*.key
+*.pem
+*.crt
+secrets/

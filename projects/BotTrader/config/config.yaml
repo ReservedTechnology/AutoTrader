@@ -1,0 +1,42 @@
+app:
+  name: "BotTrader Forex"
+  version: "1.0.0"
+  environment: ${ENVIRONMENT}
+  
+trading:
+  target_annual_return: 0.25  # 25%
+  max_drawdown: 0.15  # 15%
+  sharpe_ratio_target: 1.2
+  profit_factor_min: 1.75
+  win_rate_min: 0.60
+  
+  # Risk Management
+  risk_per_trade: 0.02  # 2% max risk per trade
+  kelly_max_position: 0.25  # 25% max Kelly position
+  portfolio_heat_max: 0.05  # 5% max total exposure
+  
+  # Trading hours (ET)
+  london_ny_overlap:
+    start: "08:00"
+    end: "12:00"
+  
+database:
+  timescale:
+    retention_days: 730  # 2 years
+    compression_after_days: 7
+    
+monitoring:
+  metrics_update_interval: 60  # seconds
+  alert_cooldown: 300  # seconds between repeated alerts
+  
+  thresholds:
+    drawdown_warning: 0.10
+    drawdown_critical: 0.20
+    sharpe_warning: 0.75
+    sharpe_critical: 0.50
+    
+logging:
+  level: ${LOG_LEVEL}
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_rotation: "daily"
+  max_backups: 30
