@@ -89,7 +89,7 @@ class HybridDatabaseManager:
                     symbol VARCHAR(10) NOT NULL,
                     bid DECIMAL(18,5) NOT NULL,
                     ask DECIMAL(18,5) NOT NULL,
-                    spread DECIMAL(10,5) GENERATED ALWAYS AS (ask - bid) STORED,
+                    spread DECIMAL(10,5),
                     volume BIGINT,
                     timeframe VARCHAR(10),
                     source VARCHAR(20) DEFAULT 'oanda'
